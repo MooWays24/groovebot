@@ -4,7 +4,7 @@ const fs = require('fs');
 const Discord = require('discord.js');
 const Client = require('./client/Client');
 const config = require('./config.json');
-const {Player} = require('discord-player');
+const { Player } = require('discord-player');
 const { YoutubeiExtractor } = require('discord-player-youtubei');
 
 const {
@@ -28,13 +28,13 @@ for (const file of commandFiles) {
 
 console.log(client.commands);
 
-const oauthTokens = {
-    accessToken: process.env.YOUTUBE_ACCESS_TOKEN,
-    refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
-    scope: process.env.YOUTUBE_SCOPE,
-    tokenType: process.env.YOUTUBE_TOKEN_TYPE,
-    expiryDate: new Date(process.env.YOUTUBE_EXPIRY_DATE).getTime()
-};
+// const oauthTokens = {
+//     accessToken: process.env.YOUTUBE_ACCESS_TOKEN,
+//     refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+//     scope: process.env.YOUTUBE_SCOPE,
+//     tokenType: process.env.YOUTUBE_TOKEN_TYPE,
+//     expiryDate: process.env.YOUTUBE_EXPIRY_DATE ? new Date(process.env.YOUTUBE_EXPIRY_DATE).getTime() : null
+// };
 
 const player = new Player(client, {
     ytdlOptions: {
@@ -48,24 +48,24 @@ const player = new Player(client, {
 
 // Register the Youtube extractor
 player.extractors.register(YoutubeiExtractor, {
-       authentication: process.env.YOUTUBE_AUTH,
+    authentication: process.env.YOUTUBE_AUTH,
 });
 console.log('YouTubeI extractor registered with cookies!');
 
 // Register the Soundcloud extractor
-player.extractors.register(SoundCloudExtractor);
+player.extractors.register(SoundCloudExtractor, {});
 console.log('SoundCloud extractor registered!');
 
 // Register the Spotify extractor
-player.extractors.register(SpotifyExtractor);
+player.extractors.register(SpotifyExtractor, {});
 console.log('Spotify extractor registered!');
 
 // Register the Apple Music extractor
-player.extractors.register(AppleMusicExtractor);
+player.extractors.register(AppleMusicExtractor, {});
 console.log('Apple Music extractor registered!');
 
 // Register the AttachmentExtractor
-player.extractors.register(AttachmentExtractor);
+player.extractors.register(AttachmentExtractor, {});
 console.log('Attachment extractor registered!');
 
 player.events.on('audioTrackAdd', (queue, song) => {
@@ -114,10 +114,13 @@ player.events.on('playerError', (queue, error) => {
 
 client.on('ready', function () {
     console.log('Ready!');
-    client.user.presence.set({
-        activities: [{name: config.activity, type: Number(config.activityType)}],
-        status: Discord.Status.Ready,
-    });
+    if (client.user) {
+        client.user.presence.set({
+
+            status: 'online',
+        });
+    }
+
 });
 
 client.once('reconnecting', () => {
@@ -135,7 +138,7 @@ client.on('messageCreate', async message => {
     if (message.content === '!deploy' && (message.author.id === client.application?.owner?.id || `${message.author.id}` === '269249777185718274' || `${message.author.id}` === '755827989073231932')) {
         console.log(`Got command deployment signal from user: ${message.author.id}`);
         await message.guild.commands
-            .set(client.commands)
+            .set(client.commands.map(cmd => cmd))
             .then(() => {
                 console.log("Deployed slash commannds.");
                 message.reply('Deployed!');
@@ -148,6 +151,8 @@ client.on('messageCreate', async message => {
 });
 
 client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+
     const command = client.commands.get(interaction.commandName.toLowerCase());
 
     try {
