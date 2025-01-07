@@ -122,8 +122,11 @@ client.once('disconnect', () => {
     console.log('Disconnect!');
 });
 
-client.on('messageCreate', async message => {
+const ttsStates = new Map();
+
+client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
+    
     if (!client.application?.owner) await client.application?.fetch();
 
     if (message.content === '!deploy' && (
@@ -132,42 +135,50 @@ client.on('messageCreate', async message => {
         message.author.id === '755827989073231932'
     )) {
         console.log(`Deploy command received from user: ${message.author.id}`);
+
+        const commands = [];
+
+        client.commands.forEach((cmd) => {
+            commands.push(cmd);
+        });
+        
+        commands.push({
+            name: 'echo',
+            description: 'Toggle TTS for your messages in the voice channel.',
+            options: [
+                {
+                    name: 'state',
+                    type: Discord.ApplicationCommandOptionType.String,
+                    description: 'Set echo state to "on" or "off"',
+                    required: true,
+                    choices: [
+                        { name: 'on', value: 'on' },
+                        { name: 'off', value: 'off' },
+                    ],
+                },
+            ],
+        });
+
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
         try {
-            await message.guild.commands.set(client.commands.map(cmd => cmd));
-            console.log("Deployed slash commands.");
-            message.reply('✅ | Commands deployed!');
-        } catch (err) {
-            console.error(`Failed to deploy commands: ${err}`);
-            message.reply('❌ | Failed to deploy commands! Ensure the bot has the `application.commands` permission.');
+            console.log('🔄 | Refreshing application (/) commands...');
+            await rest.put(
+                Routes.applicationGuildCommands(client.application.id, process.env.GUILD_ID),
+                { body: commands }
+            );
+            console.log('✅ | Successfully reloaded application (/) commands.');
+            message.reply('✅ | Commands deployed successfully!');
+        } catch (error) {
+            console.error('❌ | Failed to deploy commands:', error);
+            message.reply('❌ | Failed to deploy commands! Check the logs for details.');
         }
+        return;
     }
-});
-
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand()) return;
-
-    const command = client.commands.get(interaction.commandName.toLowerCase());
-
-    try {
-        if (['ban', 'userinfo'].includes(interaction.commandName)) {
-            command.execute(interaction, client);
-        } else {
-            command.execute(interaction);
-        }
-    } catch (error) {
-        console.error(error);
-        await interaction.followUp({ content: '❌ | An error occurred while executing the command!' });
-    }
-});
-
-const ttsStates = new Map();
-
-client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.guild) return;
-
+    
     const guildId = message.guild.id;
     const userId = message.author.id;
-    
+
     if (ttsStates.has(guildId) && ttsStates.get(guildId).get(userId)) {
         const player = useMainPlayer();
         const queue = player.nodes.get(message.guild.id);
@@ -213,6 +224,24 @@ client.on('messageCreate', async (message) => {
         }
     }
 });
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+
+    const command = client.commands.get(interaction.commandName.toLowerCase());
+
+    try {
+        if (['ban', 'userinfo'].includes(interaction.commandName)) {
+            command.execute(interaction, client);
+        } else {
+            command.execute(interaction);
+        }
+    } catch (error) {
+        console.error(error);
+        await interaction.followUp({ content: '❌ | An error occurred while executing the command!' });
+    }
+});
+
 client.on('voiceStateUpdate', (oldState, newState) => {
     const guildId = oldState.guild.id;
     const userId = oldState.id;
