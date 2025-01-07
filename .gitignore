@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.env
+*.save
+*.log
+*.txt
+temp/
+*.bak
+cookies.json
+config.json
