@@ -36,15 +36,49 @@ const player = new Player(client, {
     }
 });
 
-player.extractors.register(YoutubeiExtractor, {
-    authentication: process.env.YOUTUBE_AUTH,
-});
-player.extractors.register(SoundCloudExtractor, {});
-player.extractors.register(SpotifyExtractor, {});
-player.extractors.register(AppleMusicExtractor, {});
-player.extractors.register(AttachmentExtractor, {});
-player.extractors.register(TTSExtractor, { language: 'en', slow: false }); // Register TTS extractor
-console.log('All extractors registered, including TTS!');
+try {
+    player.extractors.register(YoutubeiExtractor, {
+        authentication: process.env.YOUTUBE_AUTH,
+    });
+    console.log('✔ YouTubei extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register YouTubei extractor:', error);
+}
+
+try {
+    player.extractors.register(SoundCloudExtractor, {});
+    console.log('✔ SoundCloud extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register SoundCloud extractor:', error);
+}
+
+try {
+    player.extractors.register(SpotifyExtractor, {});
+    console.log('✔ Spotify extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Spotify extractor:', error);
+}
+
+try {
+    player.extractors.register(AppleMusicExtractor, {});
+    console.log('✔ Apple Music extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Apple Music extractor:', error);
+}
+
+try {
+    player.extractors.register(AttachmentExtractor, {});
+    console.log('✔ Attachment extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Attachment extractor:', error);
+}
+
+try {
+    player.extractors.register(TTSExtractor, { language: 'en', slow: false });
+    console.log('✔ TTS extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register TTS extractor:', error);
+}
 
 player.events.on('audioTrackAdd', (queue, song) => {
     queue.metadata.channel.send(`🎶 | Song **${song.title}** added to the queue!`);
@@ -128,18 +162,27 @@ client.on('interactionCreate', async interaction => {
 
 const ttsStates = new Map();
 
-client.on('messageCreate', async message => {
+client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
     const guildId = message.guild.id;
     const userId = message.author.id;
+    
     if (ttsStates.has(guildId) && ttsStates.get(guildId).get(userId)) {
+        const player = useMainPlayer();
+        const queue = player.nodes.get(message.guild.id);
         const voiceChannel = message.member.voice.channel;
+
         if (!voiceChannel) {
             return message.reply('❌ | You need to be in a voice channel to use TTS.');
         }
 
         try {
+            if (queue && queue.node.isPlaying()) {
+                await queue.node.pause();
+                console.log('Music playback paused for TTS.');
+            }
+
             await player.play(voiceChannel.id, `tts:${message.content}`, {
                 nodeOptions: {
                     metadata: {
@@ -153,12 +196,23 @@ client.on('messageCreate', async message => {
                     bufferingTimeout: 0,
                 },
             });
+
+            player.events.once('playerEnd', async () => {
+                if (queue && !queue.node.isPlaying()) {
+                    await queue.node.resume();
+                    console.log('Music playback resumed after TTS.');
+                }
+            });
         } catch (error) {
-            console.error('Error playing TTS:', error);
+            console.error('Error during TTS playback:', error);
+
+            if (queue && !queue.node.isPlaying()) {
+                await queue.node.resume();
+                console.log('Music playback resumed after TTS error.');
+            }
         }
     }
 });
-
 client.on('voiceStateUpdate', (oldState, newState) => {
     const guildId = oldState.guild.id;
     const userId = oldState.id;
