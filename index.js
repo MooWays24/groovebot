@@ -122,6 +122,89 @@ client.on('ready', () => {
     }
 });
 
+async function deployCommands(message) {
+
+    console.log(`Deploy command received from user: ${message.author.id} in guild: ${message.guild.id}`);
+
+    const commands = [];
+    client.commands.forEach((cmd) => {
+        commands.push(cmd);
+    });
+
+    const discordToken = process.env.DISCORD_TOKEN;
+    if (!discordToken) {
+        console.error('❌ | DISCORD_TOKEN is not defined in the environment variables.');
+        return;
+    }
+    const rest = new REST({ version: '10' }).setToken(discordToken);
+
+    try {
+        console.log('🔄 | Refreshing application (/) commands...');
+        if (client?.application?.id && message?.guild?.id) {
+            await rest.put(
+                Routes.applicationGuildCommands(client?.application?.id, message.guild.id),
+                { body: commands }
+            );
+            console.log(`✅ | Successfully reloaded application (/) commands for guild: ${message.guild.id}`);
+            message.reply('✅ | Commands deployed successfully!');
+        }
+    }
+    catch (error) {
+        console.error('❌ | Failed to deploy commands:', error);
+        message.reply('❌ | Failed to deploy commands! Check the logs for details.');
+    }
+    return;
+}
+
+async function handleTTS(message) {
+    const player = useMainPlayer();
+    const queue = player.nodes.get(message.guild.id);
+    const member = message.member;
+    if (!member) {
+        return message.reply('❌ | Member not found.');
+    }
+    const voiceChannel = member.voice.channel;
+
+    if (!voiceChannel) {
+        return message.reply('❌ | You need to be in a voice channel to use TTS.');
+    }
+
+    try {
+        if (queue && queue.node.isPlaying()) {
+            queue.node.pause();
+            console.log('Music playback paused for TTS.');
+        }
+
+        await player.play(voiceChannel.id, `tts:${message.content}`, {
+            nodeOptions: {
+                metadata: {
+                    channel: message.channel,
+                    client: message.guild?.members.me,
+                    requestedBy: message.author.username,
+                },
+                leaveOnEmptyCooldown: 300000,
+                leaveOnEmpty: true,
+                leaveOnEnd: false,
+                bufferingTimeout: 0,
+            },
+        });
+
+        player.events.once('playerFinish', async () => {
+            if (queue && !queue.node.isPlaying()) {
+                queue.node.resume();
+                console.log('Music playback resumed after TTS.');
+            }
+        });
+    } catch (error) {
+        console.error('Error during TTS playback:', error);
+
+        if (queue && !queue.node.isPlaying()) {
+            queue.node.resume();
+            console.log('Music playback resumed after TTS error.');
+        }
+    }
+}
+
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -132,105 +215,14 @@ client.on('messageCreate', async (message) => {
         message.author.id === '269249777185718274' ||
         message.author.id === '755827989073231932'
     )) {
-        console.log(`Deploy command received from user: ${message.author.id} in guild: ${message.guild.id}`);
-
-        const commands = [];
-        client.commands.forEach((cmd) => {
-            commands.push(cmd);
-        });
-
-        commands.push({
-            name: 'echo',
-            description: 'Toggle TTS for your messages in the voice channel.',
-            options: [
-                {
-                    name: 'state',
-                    type: Discord.ApplicationCommandOptionType.String,
-                    description: 'Set echo state to "on" or "off"',
-                    required: true,
-                    choices: [
-                        { name: 'on', value: 'on' },
-                        { name: 'off', value: 'off' },
-                    ],
-                },
-            ],
-        });
-
-        const discordToken = process.env.DISCORD_TOKEN;
-        if (!discordToken) {
-            console.error('❌ | DISCORD_TOKEN is not defined in the environment variables.');
-            return;
-        }
-        const rest = new REST({ version: '10' }).setToken(discordToken);
-
-        try {
-            console.log('🔄 | Refreshing application (/) commands...');
-            if (client?.application?.id && message?.guild?.id) {
-                await rest.put(
-                    Routes.applicationGuildCommands(client?.application?.id, message.guild.id),
-                    { body: commands }
-                );
-                console.log(`✅ | Successfully reloaded application (/) commands for guild: ${message.guild.id}`);
-                message.reply('✅ | Commands deployed successfully!');
-            }
-        }
-        catch (error) {
-            console.error('❌ | Failed to deploy commands:', error);
-            message.reply('❌ | Failed to deploy commands! Check the logs for details.');
-        }
-        return;
+        return await deployCommands(message);
     }
     const guildId = message.guild.id;
     const userId = message.author.id;
 
     if (client.ttsStates.has(guildId) && client.ttsStates.get(guildId).get(userId)) {
-        const player = useMainPlayer();
-        const queue = player.nodes.get(message.guild.id);
-        const member = message.member;
-        if (!member) {
-            return message.reply('❌ | Member not found.');
-        }
-        const voiceChannel = member.voice.channel;
-
-        if (!voiceChannel) {
-            return message.reply('❌ | You need to be in a voice channel to use TTS.');
-        }
-
-        try {
-            if (queue && queue.node.isPlaying()) {
-                queue.node.pause();
-                console.log('Music playback paused for TTS.');
-            }
-
-            await player.play(voiceChannel.id, `tts:${message.content}`, {
-                nodeOptions: {
-                    metadata: {
-                        channel: message.channel,
-                        client: message.guild?.members.me,
-                        requestedBy: message.author.username,
-                    },
-                    leaveOnEmptyCooldown: 300000,
-                    leaveOnEmpty: true,
-                    leaveOnEnd: false,
-                    bufferingTimeout: 0,
-                },
-            });
-
-            player.events.once('playerFinish', async () => {
-                if (queue && !queue.node.isPlaying()) {
-                    queue.node.resume();
-                    console.log('Music playback resumed after TTS.');
-                }
-            });
-        } catch (error) {
-            console.error('Error during TTS playback:', error);
-
-            if (queue && !queue.node.isPlaying()) {
-                queue.node.resume();
-                console.log('Music playback resumed after TTS error.');
-            }
-        }
-    }
+        return await handleTTS(message);
+    };
 });
 
 
@@ -241,14 +233,11 @@ client.on('interactionCreate', async (interaction) => {
     if (!command) {
         return;
     }
-
     try {
-        await interaction.deferReply({ ephemeral: false });
-
-        await command.execute(interaction, client);
-
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.followUp({ content: '✅ | Command executed successfully!' });
+        if (['ban', 'userinfo', 'echo'].includes(interaction.commandName)) {
+            command.execute(interaction, client);
+        } else {
+            command.execute(interaction);
         }
     } catch (error) {
         console.error('Command execution error:', error);
