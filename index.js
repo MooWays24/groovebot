@@ -128,7 +128,7 @@ const ttsStates = new Map();
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
-    
+
     if (!client.application?.owner) await client.application?.fetch();
 
     if (message.content === '!deploy' && (
@@ -143,7 +143,7 @@ client.on('messageCreate', async (message) => {
         client.commands.forEach((cmd) => {
             commands.push(cmd);
         });
-        
+
         commands.push({
             name: 'echo',
             description: 'Toggle TTS for your messages in the voice channel.',
@@ -163,10 +163,12 @@ client.on('messageCreate', async (message) => {
 
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
+        const guildId = message.guild.id;
+
         try {
             console.log('🔄 | Refreshing application (/) commands...');
             await rest.put(
-                Routes.applicationGuildCommands(client.application.id, process.env.GUILD_ID),
+                Routes.applicationGuildCommands(client.application.id, guildId),
                 { body: commands }
             );
             console.log('✅ | Successfully reloaded application (/) commands.');
@@ -177,7 +179,8 @@ client.on('messageCreate', async (message) => {
         }
         return;
     }
-    
+
+
     const guildId = message.guild.id;
     const userId = message.author.id;
 
