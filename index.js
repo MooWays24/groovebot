@@ -12,6 +12,8 @@ const {
     SoundCloudExtractor,
     AttachmentExtractor
 } = require('@discord-player/extractor');
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v10');
 const { TTSExtractor } = require('tts-extractor');
 
 const cookies = JSON.parse(fs.readFileSync('cookies.json', 'utf8'));
