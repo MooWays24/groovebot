@@ -18,10 +18,12 @@
   "dependencies": {
     "@discord-player/extractor": "^4.5.1",
     "@discordjs/opus": "^0.9.0",
+    "@discordjs/rest": "^2.4.2",
     "@discordjs/voice": "^0.18.0",
     "@distube/ytdl-core": "4.15.8",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "conf": "^12.0.0",
+    "discord-api-types": "^0.37.115",
     "discord-player": "^6.6.2",
     "discord-player-youtubei": "github:MangoD33/discord-player-youtubei",
     "discord.js": "^14.12.1",
@@ -30,10 +32,10 @@
     "fluent-ffmpeg": "^2.1.2",
     "opusscript": "0.0.8",
     "prism-media": "^1.1.0",
+    "save": "^2.9.0",
+    "tts-extractor": "^1.0.2",
     "youtube-dl-exec": "^3.0.12",
-    "ytdl-core": "^4.11.5",
-    "discord-api-types": "^0.37.115",
-    "@discordjs/rest": "^2.4.2"
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "prettier": "3.0.2"
