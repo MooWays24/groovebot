@@ -1,10 +1,11 @@
 require('dotenv').config();
 
 const fs = require('fs');
+
 const Discord = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
-const { Player } = require('discord-player');
+const { Player, useMainPlayer } = require('discord-player');
 const { YoutubeiExtractor } = require('discord-player-youtubei');
 const {
     SpotifyExtractor,
@@ -16,7 +17,9 @@ const { TTSExtractor } = require('tts-extractor');
 
 const cookies = JSON.parse(fs.readFileSync('cookies.json', 'utf8'));
 
-const client = new Discord.Client({ intents: ['GUILD_MESSAGES', 'GUILD_VOICE_STATES'] });
+const Client = require('./client/Client');
+
+const client = new Client();
 client.commands = new Discord.Collection();
 
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
@@ -26,7 +29,7 @@ for (const file of commandFiles) {
 }
 console.log(client.commands);
 
-const player = new Player(client, {
+const ytdlOptions = {
     ytdlOptions: {
         requestOptions: {
             headers: {
@@ -34,20 +37,53 @@ const player = new Player(client, {
             },
         },
     },
-});
+};
+console.log(`Using yt-dlp options: ${JSON.stringify(ytdlOptions)}`);
+const player = new Player(client, ytdlOptions);
 
 try {
-    player.extractors.register(YoutubeiExtractor, { authentication: process.env.YOUTUBE_AUTH });
+    player.extractors.register(YoutubeiExtractor, {
+        authentication: process.env.YOUTUBE_AUTH,
+    });
     console.log('✔ YouTubei extractor registered successfully!');
 } catch (error) {
     console.error('❌ Failed to register YouTubei extractor:', error);
 }
 
-player.extractors.register(SoundCloudExtractor, {});
-player.extractors.register(SpotifyExtractor, {});
-player.extractors.register(AppleMusicExtractor, {});
-player.extractors.register(AttachmentExtractor, {});
-player.extractors.register(TTSExtractor, { language: 'en', slow: false });
+try {
+    player.extractors.register(SoundCloudExtractor, {});
+    console.log('✔ SoundCloud extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register SoundCloud extractor:', error);
+}
+
+try {
+    player.extractors.register(SpotifyExtractor, {});
+    console.log('✔ Spotify extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Spotify extractor:', error);
+}
+
+try {
+    player.extractors.register(AppleMusicExtractor, {});
+    console.log('✔ Apple Music extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Apple Music extractor:', error);
+}
+
+try {
+    player.extractors.register(AttachmentExtractor, {});
+    console.log('✔ Attachment extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register Attachment extractor:', error);
+}
+
+try {
+    player.extractors.register(TTSExtractor, { language: 'en', slow: false });
+    console.log('✔ TTS extractor registered successfully!');
+} catch (error) {
+    console.error('❌ Failed to register TTS extractor:', error);
+}
 
 player.events.on('audioTrackAdd', (queue, song) => {
     queue.metadata.channel.send(`🎶 | Song **${song.title}** added to the queue!`);
@@ -55,13 +91,35 @@ player.events.on('audioTrackAdd', (queue, song) => {
 player.events.on('playerStart', (queue, track) => {
     queue.metadata.channel.send(`▶ | Started playing: **${track.title}**!`);
 });
+player.events.on('audioTracksAdd', (queue) => {
+    queue.metadata.channel.send('🎶 | Tracks have been queued!');
+});
+player.events.on('disconnect', queue => {
+    queue.metadata.channel.send('❌ | I was manually disconnected from the voice channel, clearing queue!');
+});
+player.events.on('emptyChannel', queue => {
+    queue.metadata.channel.send('❌ | Nobody is in the voice channel, leaving...');
+});
+player.events.on('emptyQueue', queue => {
+    queue.metadata.channel.send('✅ | Queue finished!');
+});
 player.events.on('error', (queue, error) => {
-    console.error(`[${queue.guild.name}] Error: ${error.message}`);
+    console.error(`[${queue.guild.name}] Error emitted from the connection: ${error.message}`);
+});
+player.events.on('playerError', (queue, error) => {
+    console.error(`Player error: ${error.message}`);
+});
+player.events.on('debug', (queue, message) => {
+    console.log(`Player debug: ${message}`);
 });
 
 client.on('ready', () => {
     console.log('Bot is ready!');
-    client.user.setPresence({ status: 'online', activities: [{ name: 'Music & Commands' }] });
+    if (client.user) {
+        client.user.setPresence({ status: 'online', activities: [{ name: 'Music & Commands' }] });
+    } else {
+        console.error('client.user is null');
+    }
 });
 
 client.on('messageCreate', async (message) => {
@@ -98,22 +156,83 @@ client.on('messageCreate', async (message) => {
             ],
         });
 
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+        const discordToken = process.env.DISCORD_TOKEN;
+        if (!discordToken) {
+            console.error('❌ | DISCORD_TOKEN is not defined in the environment variables.');
+            return;
+        }
+        const rest = new REST({ version: '10' }).setToken(discordToken);
 
         try {
             console.log('🔄 | Refreshing application (/) commands...');
-            await rest.put(
-                Routes.applicationGuildCommands(client.application.id, message.guild.id), // Dynamic guild ID
-                { body: commands }
-            );
-            console.log(`✅ | Successfully reloaded application (/) commands for guild: ${message.guild.id}`);
-            message.reply('✅ | Commands deployed successfully!');
-        } catch (error) {
+            if (client?.application?.id && message?.guild?.id) {
+                await rest.put(
+                    Routes.applicationGuildCommands(client?.application?.id, message.guild.id),
+                    { body: commands }
+                );
+                console.log(`✅ | Successfully reloaded application (/) commands for guild: ${message.guild.id}`);
+                message.reply('✅ | Commands deployed successfully!');
+            }
+        }
+        catch (error) {
             console.error('❌ | Failed to deploy commands:', error);
             message.reply('❌ | Failed to deploy commands! Check the logs for details.');
         }
+        return;
+    }
+    const guildId = message.guild.id;
+    const userId = message.author.id;
+
+    if (client.ttsStates.has(guildId) && client.ttsStates.get(guildId).get(userId)) {
+        const player = useMainPlayer();
+        const queue = player.nodes.get(message.guild.id);
+        const member = message.member;
+        if (!member) {
+            return message.reply('❌ | Member not found.');
+        }
+        const voiceChannel = member.voice.channel;
+
+        if (!voiceChannel) {
+            return message.reply('❌ | You need to be in a voice channel to use TTS.');
+        }
+
+        try {
+            if (queue && queue.node.isPlaying()) {
+                queue.node.pause();
+                console.log('Music playback paused for TTS.');
+            }
+
+            await player.play(voiceChannel.id, `tts:${message.content}`, {
+                nodeOptions: {
+                    metadata: {
+                        channel: message.channel,
+                        client: message.guild?.members.me,
+                        requestedBy: message.author.username,
+                    },
+                    leaveOnEmptyCooldown: 300000,
+                    leaveOnEmpty: true,
+                    leaveOnEnd: false,
+                    bufferingTimeout: 0,
+                },
+            });
+
+            player.events.once('playerFinish', async () => {
+                if (queue && !queue.node.isPlaying()) {
+                    queue.node.resume();
+                    console.log('Music playback resumed after TTS.');
+                }
+            });
+        } catch (error) {
+            console.error('Error during TTS playback:', error);
+
+            if (queue && !queue.node.isPlaying()) {
+                queue.node.resume();
+                console.log('Music playback resumed after TTS error.');
+            }
+        }
     }
 });
+
 
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
